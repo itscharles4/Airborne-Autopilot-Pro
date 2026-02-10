@@ -1,0 +1,7 @@
+{
+  "name": "Airborne Autopilot Pro",
+  "description": "An advanced autonomous drone traffic management system featuring real-time 3D airspace visualization, fleet telemetric monitoring, and AI-driven route optimization.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
