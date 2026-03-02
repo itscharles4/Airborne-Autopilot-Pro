@@ -48,4 +48,4 @@ export interface Alert {
   timestamp: string;
 }
 
-export type ViewType = '3D' | 'FLEET' | 'FLIGHTS' | 'DASHBOARD' | 'MEDIA';
+export type ViewType = '3D' | 'FLEET' | 'FLIGHTS' | 'DASHBOARD' | 'MEDIA' | 'HEALTH' | 'MISSION' | 'ROUTES' | 'REPLAY' | 'REVENUE' | 'MAINTENANCE';

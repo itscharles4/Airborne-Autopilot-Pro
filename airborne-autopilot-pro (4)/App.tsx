@@ -6,7 +6,13 @@ import FleetManager from './components/FleetManager';
 import Dashboard from './components/Dashboard';
 import MediaProcessor from './components/MediaProcessor';
 import LoginPage from './components/LoginPage';
-import { LayoutGrid, Navigation, Settings, LayoutDashboard, Bell, Search, Activity, Cpu, Sparkles } from 'lucide-react';
+import DroneHealthScore from './components/DroneHealthScore';
+import AIMissionPlanner from './components/AIMissionPlanner';
+import TSPOptimizer from './components/TSPOptimizer';
+import FlightReplay from './components/FlightReplay';
+import RevenueDashboard from './components/RevenueDashboard';
+import PredictiveMaintenance from './components/PredictiveMaintenance';
+import { LayoutGrid, Navigation, Settings, LayoutDashboard, Bell, Search, Activity, Cpu, Sparkles, Route, Clock, BarChart2, Bot, Wrench } from 'lucide-react';
 
 const INITIAL_DRONES: Drone[] = [
   { id: 'alpha-1', name: 'Alpha-1', model: 'CZ4-Heavy', status: DroneStatus.FLYING, battery: 84.2, speed: 45, maxAltitude: 500, position: { x: -100, y: 150, z: -50 }, lastUpdated: new Date().toISOString() },
@@ -79,6 +85,13 @@ const App: React.FC = () => {
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 px-4 pt-4">Intelligence</div>
           <NavItem icon={Sparkles} label="Media Intelligence" type="MEDIA" />
           <NavItem icon={LayoutDashboard} label="System Dashboard" type="DASHBOARD" />
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 px-4 pt-4">Advanced</div>
+          <NavItem icon={Activity} label="Drone Health" type="HEALTH" />
+          <NavItem icon={Bot} label="AI Mission Plan" type="MISSION" />
+          <NavItem icon={Route} label="Route Optimizer" type="ROUTES" />
+          <NavItem icon={Clock} label="Flight Replay" type="REPLAY" />
+          <NavItem icon={BarChart2} label="Revenue & Analytics" type="REVENUE" />
+          <NavItem icon={Wrench} label="Predictive Maintenance" type="MAINTENANCE" />
         </nav>
 
         <div className="mt-auto space-y-4">
@@ -133,6 +146,12 @@ const App: React.FC = () => {
           {activeView === 'FLEET' && <FleetManager drones={drones} onAddDrone={handleAddDrone} />}
           {activeView === 'DASHBOARD' && <Dashboard drones={drones} />}
           {activeView === 'MEDIA' && <MediaProcessor />}
+          {activeView === 'HEALTH' && <DroneHealthScore drones={drones} />}
+          {activeView === 'MISSION' && <AIMissionPlanner drones={drones} />}
+          {activeView === 'ROUTES' && <TSPOptimizer />}
+          {activeView === 'REPLAY' && <FlightReplay drones={drones} />}
+          {activeView === 'REVENUE' && <RevenueDashboard drones={drones} />}
+          {activeView === 'MAINTENANCE' && <PredictiveMaintenance drones={drones} />}
           {activeView === 'FLIGHTS' && (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Navigation size={64} className="text-slate-800 mb-6" />

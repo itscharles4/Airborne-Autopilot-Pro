@@ -1,0 +1,37 @@
+version: '3.9'
+services:
+  api:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/airborne_autopilot
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=airborne_super_secret_jwt_key_2025
+      - JWT_REFRESH_SECRET=airborne_refresh_secret_key_2025
+      - JWT_EXPIRES_IN=15m
+      - JWT_REFRESH_EXPIRES_IN=7d
+      - FRONTEND_URL=http://localhost:5173
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - ./src:/app/src
+    command: npm run dev
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  mongo_data:
