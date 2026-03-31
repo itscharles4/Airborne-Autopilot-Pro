@@ -132,6 +132,13 @@ export default function TSPOptimizer() {
   const [selectedDrone, setSelectedDrone] = useState<string>("");
   const [showAuthDialog, setShowAuthDialog] = useState(!token);
   const [authEmail, setAuthEmail] = useState("admin@charronix.com");
+
+  const [pickupNodeForPrice, setPickupNodeForPrice] = useState<number | null>(0);
+  const [deliveryAddressForPrice, setDeliveryAddressForPrice] = useState<string>("");
+  const [priorityForPrice, setPriorityForPrice] = useState<"STANDARD" | "EXPRESS" | "URGENT">("STANDARD");
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
+
   const [authPassword, setAuthPassword] = useState("Admin@123");
   const [loadingAuth, setLoadingAuth] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -184,6 +191,44 @@ export default function TSPOptimizer() {
   useEffect(() => {
     if (token) fetchDrones();
   }, [token]);
+
+  // Real-time price calculation (debounced, based on pickup + delivery + priority)
+  useEffect(() => {
+    if (pickupNodeForPrice === null || !deliveryAddressForPrice || !priorityForPrice) {
+      setCalculatedPrice(null);
+      return;
+    }
+
+    setPriceLoading(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/orders/calculate-price`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            pickup_node: pickupNodeForPrice,
+            delivery_address: deliveryAddressForPrice,
+            priority: priorityForPrice,
+          }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || 'Price fetch failed');
+        }
+
+        const data = await resp.json();
+        setCalculatedPrice(data.price);
+      } catch (err) {
+        console.warn('Price calc error', err);
+        setCalculatedPrice(null);
+      } finally {
+        setPriceLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [pickupNodeForPrice, deliveryAddressForPrice, priorityForPrice, token]);
+
 
   async function fetchDrones() {
     if (!token) return;
@@ -629,6 +674,50 @@ export default function TSPOptimizer() {
         </div>
 
         <div className="col-span-4 space-y-4">
+          {/* Real-time price estimate */}
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Delivery Price Estimate
+            </label>
+            <div className="space-y-2">
+              <label className="block text-xs text-slate-300">Pickup Node</label>
+              <input
+                type="number"
+                min={0}
+                max={19}
+                value={pickupNodeForPrice ?? ''}
+                onChange={e => setPickupNodeForPrice(Number(e.target.value))}
+                className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              />
+              <label className="block text-xs text-slate-300">Delivery Address</label>
+              <input
+                type="text"
+                value={deliveryAddressForPrice}
+                onChange={e => setDeliveryAddressForPrice(e.target.value)}
+                className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              />
+              <label className="block text-xs text-slate-300">Priority</label>
+              <select
+                value={priorityForPrice}
+                onChange={e => setPriorityForPrice(e.target.value as 'STANDARD' | 'EXPRESS' | 'URGENT')}
+                className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              >
+                <option value="STANDARD">STANDARD</option>
+                <option value="EXPRESS">EXPRESS</option>
+                <option value="URGENT">URGENT</option>
+              </select>
+            </div>
+            <div className="mt-3 text-sm">
+              {priceLoading ? (
+                <span className="text-sky-300">Calculating price...</span>
+              ) : calculatedPrice !== null ? (
+                <span className="text-emerald-300">Estimated price: ₹{calculatedPrice.toFixed(2)}</span>
+              ) : (
+                <span className="text-slate-400">Enter details to see price</span>
+              )}
+            </div>
+          </div>
+
           {/* Drone Selection */}
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">

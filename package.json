@@ -1,0 +1,11 @@
+{
+  "name": "airborne-autopilot-root",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npx --yes concurrently \"npm run start:backend\" \"npm run start:frontend\" \"npm run start:landing\"",
+    "start:backend": "cd airborne-autopilot-backend && npm run dev",
+    "start:frontend": "cd \"airborne-autopilot-pro (4)\" && npm run dev -- --open",
+    "start:landing": "cd 3d-landing-page && npm run dev",
+    "install:all": "cd airborne-autopilot-backend && npm install && cd ../\"airborne-autopilot-pro (4)\" && npm install && cd ../3d-landing-page && npm install"
+  }
+}

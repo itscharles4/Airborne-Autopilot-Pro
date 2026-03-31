@@ -3,6 +3,9 @@ const Drone = require('../models/Drone');
 const Flight = require('../models/Flight');
 const Revenue = require('../models/Revenue');
 const { dijkstra } = require('../algorithms/dijkstra');
+const { PriceCalculator } = require('../services/priceCalculator');
+const { geocodeAddress, isServiceHours } = require('../utils/serviceUtils');
+const { orderQueue } = require('../utils/priorityQueue');
 
 exports.getAllOrders = async (req, res, next) => {
   try {
@@ -25,51 +28,156 @@ exports.getOrderById = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+exports.calculatePrice = async (req, res, next) => {
+  try {
+    const { pickup_node, delivery_node, delivery_address, priority } = req.body;
+    if (pickup_node === undefined || (!delivery_node && !delivery_address) || !priority) {
+      return res.status(400).json({ error: 'pickup_node, delivery_node or delivery_address, and priority are required' });
+    }
+
+    const pickupNode = Number(pickup_node);
+    const deliveryNodeResolved = delivery_node !== undefined ? Number(delivery_node) : geocodeAddress(delivery_address);
+    if (isNaN(pickupNode) || (deliveryNodeResolved === null || deliveryNodeResolved === undefined || isNaN(Number(deliveryNodeResolved)))) {
+      return res.status(404).json({ error: 'Address not serviceable' });
+    }
+
+    const price = PriceCalculator.calculate_price(pickupNode, Number(deliveryNodeResolved), priority);
+    const distance = PriceCalculator.calculate_distance(pickupNode, Number(deliveryNodeResolved));
+    const eta_minutes = Math.max(10, Math.round(distance * 2));
+
+    return res.status(200).json({ price, distance, eta_minutes });
+  } catch (error) {
+    if (error.message === 'No path found') {
+      return res.status(404).json({ error: 'Address not serviceable' });
+    }
+    if (error.message === 'Price calculation timeout') {
+      return res.status(500).json({ error: 'Service temporarily unavailable' });
+    }
+    next(error);
+  }
+};
+
+exports.confirmOrder = async (req, res, next) => {
+  const session = await Order.startSession();
+  session.startTransaction();
+  try {
+    const order = await Order.findById(req.params.id).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (!['PENDING', 'ASSIGNED'].includes(order.status)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ success: false, message: 'Cannot confirm order in current status' });
+    }
+
+    order.status = 'ASSIGNED';
+    order.priceLock = order.price;
+    order.confirmedAt = new Date();
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({ success: true, data: order });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    next(error);
+  }
+};
+
+const PRIORITY_MULTIPLIER = {
+  STANDARD: 1.0,
+  EXPRESS: 1.25,
+  URGENT: 1.5,
+};
+
 exports.createOrder = async (req, res, next) => {
   try {
-    const { customerName, customerEmail, pickupLocation, deliveryLocation,
-            pickupNode, deliveryNode, packageWeight, priority, packageType } = req.body;
+    const {
+      pickup_node,
+      delivery_address,
+      package_size,
+      priority,
+      package_weight,
+      pickupNode,
+      deliveryNode,
+      customerName,
+      customerEmail,
+    } = req.body;
 
-    // Compute path immediately on order creation
-    const pathResult = dijkstra(pickupNode, deliveryNode);
-    if (!pathResult) {
-      return res.status(400).json({ success: false, message: 'No valid path exists between these locations' });
+    const pickup = pickup_node ?? pickupNode;
+    const deliveryAddress = delivery_address ?? delivery_address;
+
+    if (pickup === undefined || !deliveryAddress || !package_size || !priority) {
+      return res.status(400).json({ error: 'pickup_node and delivery_address are required' });
     }
+
+    if (package_weight !== undefined && Number(package_weight) > 5) {
+      return res.status(400).json({ error: 'Package exceeds maximum weight limit of 5kg' });
+    }
+
+    if (priority !== 'URGENT' && !isServiceHours()) {
+      return res.status(400).json({ error: 'Orders accepted only between 6am and 10pm' });
+    }
+
+    const deliveryNodeResolved = deliveryNode !== undefined ? deliveryNode : geocodeAddress(deliveryAddress);
+    if (deliveryNodeResolved === null || deliveryNodeResolved === undefined) {
+      return res.status(404).json({ error: 'Address not serviceable' });
+    }
+
+    if (pickup < 0 || pickup >= 20 || deliveryNodeResolved < 0 || deliveryNodeResolved >= 20) {
+      return res.status(404).json({ error: 'Address not serviceable' });
+    }
+
+    const pathResult = dijkstra(pickup, deliveryNodeResolved);
+    if (!pathResult) {
+      return res.status(404).json({ error: 'Address not serviceable' });
+    }
+
+    const distance = PriceCalculator.calculate_distance(pickup, deliveryNodeResolved);
+    const price = PriceCalculator.calculate_price(pickup, deliveryNodeResolved, priority);
+    const etaMinutes = Math.max(10, Math.round(distance * 2));
 
     const order = await Order.create({
-      customerName, customerEmail, pickupLocation, deliveryLocation,
-      pickupNode, deliveryNode, packageWeight, priority, packageType,
+      customerName: customerName || 'anonymous',
+      customerEmail: customerEmail || 'unknown@example.com',
+      pickupLocation: `node:${pickup}`,
+      deliveryLocation: deliveryAddress,
+      pickupNode: pickup,
+      deliveryNode: deliveryNodeResolved,
+      packageWeight: Number(package_weight || 1),
+      priority,
+      packageType: package_size,
+      status: 'PENDING',
+      price,
+      totalDistance: distance,
       path: pathResult.path,
-      totalDistance: pathResult.totalDistance,
-      estimatedETA: `${Math.round(pathResult.estimatedTime / 60)} minutes`,
+      estimatedETA: `${etaMinutes} minutes`,
+      placedAt: new Date(),
     });
 
-    // Auto-assign nearest available drone
-    const drone = await Drone.findOne({ status: 'IDLE', battery: { $gte: 30 } }).sort({ battery: -1 });
-    if (drone) {
-      order.droneAssigned = drone.id;
-      order.status = 'ASSIGNED';
-      drone.status = 'FLYING';
-      drone.assignedOrder = order._id;
-      await Promise.all([order.save(), drone.save()]);
-
-      // Create flight record
-      await Flight.create({
-        droneId: drone.id,
-        orderId: order._id,
-        path: pathResult.path,
-        waypoints: pathResult.waypoints,
-        totalDistance: pathResult.totalDistance,
-        startTime: new Date(),
-        status: 'FLYING',
-      });
-    }
+    const priorityScore = priority === 'URGENT' ? 1 : priority === 'EXPRESS' ? 2 : 3;
+    orderQueue.push(order._id.toString(), priorityScore);
 
     const io = req.app.get('io');
-    if (io) io.emit('order:status', { orderId: order._id, status: order.status, droneId: order.droneAssigned });
+    if (io) io.emit('order:created', { orderId: order._id, status: order.status });
 
-    res.status(201).json({ success: true, data: order });
-  } catch (error) { next(error); }
+    return res.status(200).json({
+      order_id: order._id,
+      price,
+      eta_minutes: etaMinutes,
+      status: 'PENDING',
+      placed_at: order.placedAt.toISOString(),
+    });
+  } catch (error) {
+    console.error('createOrder error', error);
+    return res.status(500).json({ error: 'Service temporarily unavailable' });
+  }
 };
 
 exports.cancelOrder = async (req, res, next) => {
