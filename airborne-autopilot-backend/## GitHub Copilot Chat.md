@@ -50,3 +50,10 @@ Number of system certificates: 99
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).
+
+
+
+
+
+
+

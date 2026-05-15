@@ -1,11 +1,18 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Drone, DroneStatus } from '../types';
-import { Battery, Trash2, Settings, ShieldAlert, Cpu, Navigation, X, MapPin, Plus, Package } from 'lucide-react';
+import { Battery, Trash2, Settings, ShieldAlert, Cpu, Navigation, X, MapPin, Plus, Package, LogIn, LogOut, Loader } from 'lucide-react';
+import { getLocationAutocomplete, getPlaceDetailsFromId } from '../services/googleMapsService';
 
 interface FleetManagerProps {
   drones: Drone[];
   onAddDrone: (drone: Drone) => void;
+}
+
+interface Suggestion {
+  placeId: string;
+  description: string;
+  mainText: string;
 }
 
 const FleetManager: React.FC<FleetManagerProps> = ({ drones, onAddDrone }) => {
@@ -13,9 +20,92 @@ const FleetManager: React.FC<FleetManagerProps> = ({ drones, onAddDrone }) => {
   const [formData, setFormData] = useState({
     id: '',
     name: '',
+    pickupLocation: '',
+    dropLocation: '',
     targetX: '',
     targetZ: ''
   });
+
+  // Autocomplete state
+  const [pickupSuggestions, setPickupSuggestions] = useState<Suggestion[]>([]);
+  const [dropSuggestions, setDropSuggestions] = useState<Suggestion[]>([]);
+  const [showPickupSuggestions, setShowPickupSuggestions] = useState(false);
+  const [showDropSuggestions, setShowDropSuggestions] = useState(false);
+  const [loadingPickup, setLoadingPickup] = useState(false);
+  const [loadingDrop, setLoadingDrop] = useState(false);
+
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+  const dropInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle pickup location autocomplete
+  const handlePickupChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({ ...formData, pickupLocation: value });
+
+    if (value.length > 2) {
+      setLoadingPickup(true);
+      try {
+        const predictions = await getLocationAutocomplete(value);
+        setPickupSuggestions(
+          predictions.map(p => ({
+            placeId: p.place_id,
+            description: p.description,
+            mainText: p.main_text || p.description,
+          }))
+        );
+        setShowPickupSuggestions(true);
+      } catch (err) {
+        console.error('Pickup autocomplete error:', err);
+      } finally {
+        setLoadingPickup(false);
+      }
+    } else {
+      setPickupSuggestions([]);
+      setShowPickupSuggestions(false);
+    }
+  };
+
+  // Handle drop location autocomplete
+  const handleDropChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({ ...formData, dropLocation: value });
+
+    if (value.length > 2) {
+      setLoadingDrop(true);
+      try {
+        const predictions = await getLocationAutocomplete(value);
+        setDropSuggestions(
+          predictions.map(p => ({
+            placeId: p.place_id,
+            description: p.description,
+            mainText: p.main_text || p.description,
+          }))
+        );
+        setShowDropSuggestions(true);
+      } catch (err) {
+        console.error('Drop autocomplete error:', err);
+      } finally {
+        setLoadingDrop(false);
+      }
+    } else {
+      setDropSuggestions([]);
+      setShowDropSuggestions(false);
+    }
+  };
+
+  // Handle suggestion selection for pickup
+  const handlePickupSelect = async (suggestion: Suggestion) => {
+    setFormData({ ...formData, pickupLocation: suggestion.description });
+    setShowPickupSuggestions(false);
+    setPickupSuggestions([]);
+  };
+
+  // Handle suggestion selection for drop
+  const handleDropSelect = async (suggestion: Suggestion) => {
+    setFormData({ ...formData, dropLocation: suggestion.description });
+    setShowDropSuggestions(false);
+    setDropSuggestions([]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +122,7 @@ const FleetManager: React.FC<FleetManagerProps> = ({ drones, onAddDrone }) => {
     };
     onAddDrone(newDrone);
     setIsModalOpen(false);
-    setFormData({ id: '', name: '', targetX: '', targetZ: '' });
+    setFormData({ id: '', name: '', pickupLocation: '', dropLocation: '', targetX: '', targetZ: '' });
   };
 
   return (
@@ -182,6 +272,94 @@ const FleetManager: React.FC<FleetManagerProps> = ({ drones, onAddDrone }) => {
                       required
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Pickup & Drop Locations */}
+              <div className="p-6 bg-emerald-500/5 rounded-[1.5rem] border border-emerald-500/20 space-y-4">
+                <div className="flex items-center gap-3 text-emerald-400 mb-4">
+                  <MapPin size={18} />
+                  <span className="text-xs font-black uppercase tracking-widest">Delivery Route</span>
+                </div>
+                
+                {/* Pickup Location */}
+                <div className="space-y-2 relative">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                    <LogIn size={14} className="text-emerald-400" />
+                    Pickup Location
+                  </label>
+                  <div className="relative">
+                    <input 
+                      ref={pickupInputRef}
+                      type="text" 
+                      value={formData.pickupLocation}
+                      onChange={handlePickupChange}
+                      onFocus={() => formData.pickupLocation.length > 2 && setShowPickupSuggestions(true)}
+                      placeholder="e.g. Downtown Hub, 123 Main St" 
+                      className="w-full bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+                      required
+                    />
+                    {loadingPickup && (
+                      <Loader size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 animate-spin" />
+                    )}
+                  </div>
+
+                  {/* Pickup Suggestions Dropdown */}
+                  {showPickupSuggestions && pickupSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-emerald-500/20 rounded-xl shadow-2xl z-[110] max-h-48 overflow-y-auto">
+                      {pickupSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.placeId}
+                          type="button"
+                          onClick={() => handlePickupSelect(suggestion)}
+                          className="w-full px-4 py-3 text-left hover:bg-emerald-500/10 border-b border-slate-800 last:border-0 transition-colors group"
+                        >
+                          <div className="text-xs text-emerald-400 font-bold group-hover:text-emerald-300">{suggestion.mainText}</div>
+                          <div className="text-[10px] text-slate-500 truncate">{suggestion.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Drop Location */}
+                <div className="space-y-2 relative">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                    <LogOut size={14} className="text-rose-400" />
+                    Drop Location
+                  </label>
+                  <div className="relative">
+                    <input 
+                      ref={dropInputRef}
+                      type="text" 
+                      value={formData.dropLocation}
+                      onChange={handleDropChange}
+                      onFocus={() => formData.dropLocation.length > 2 && setShowDropSuggestions(true)}
+                      placeholder="e.g. Harbor Terminal, 456 Port Ave" 
+                      className="w-full bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all"
+                      required
+                    />
+                    {loadingDrop && (
+                      <Loader size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400 animate-spin" />
+                    )}
+                  </div>
+
+                  {/* Drop Suggestions Dropdown */}
+                  {showDropSuggestions && dropSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-rose-500/20 rounded-xl shadow-2xl z-[110] max-h-48 overflow-y-auto">
+                      {dropSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.placeId}
+                          type="button"
+                          onClick={() => handleDropSelect(suggestion)}
+                          className="w-full px-4 py-3 text-left hover:bg-rose-500/10 border-b border-slate-800 last:border-0 transition-colors group"
+                        >
+                          <div className="text-xs text-rose-400 font-bold group-hover:text-rose-300">{suggestion.mainText}</div>
+                          <div className="text-[10px] text-slate-500 truncate">{suggestion.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

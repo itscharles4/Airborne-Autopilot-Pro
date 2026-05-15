@@ -13,7 +13,7 @@ const droneSchema = new Schema({
   model:          { type: String, default: 'DJI Mavic 3' },
   status: {
     type: String,
-    enum: ['IDLE', 'FLYING', 'CHARGING', 'MAINTENANCE', 'EMERGENCY'],
+    enum: ['IDLE', 'FLYING', 'CHARGING', 'MAINTENANCE', 'EMERGENCY', 'GROUNDED'],
     default: 'IDLE',
   },
   battery:        { type: Number, min: 0, max: 100, default: 100 },
@@ -26,6 +26,16 @@ const droneSchema = new Schema({
   lastMaintenance:{ type: Date, default: Date.now },
   assignedOrder:  { type: Schema.Types.ObjectId, ref: 'Order', default: null },
   chargingStation:{ type: String, default: 'Station-A' },
+  // Enhanced fields for realistic system
+  temperature:    { type: Number, default: 25 },
+  signalStrength: { type: Number, min: 0, max: 100, default: 100 },
+  firmwareVersion:{ type: String, default: '1.0.0' },
+  totalFlights:   { type: Number, default: 0 },
+  maintenanceScheduled: { type: Date, default: null },
+  gpsAccuracy:    { type: Number, default: 5 },
+  windResistance: { type: Number, default: 45 },
+  maxSpeed:       { type: Number, default: 68 },
+  maxRange:       { type: Number, default: 30000 },
 }, { timestamps: true });
 
 droneSchema.methods.getHealthScore = function () {

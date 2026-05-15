@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Sparkles, Camera, Download, RefreshCcw, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Sparkles, Camera, Download, RefreshCcw, Send, Image as ImageIcon, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { editImage } from '../services/geminiService';
 
 const MediaProcessor: React.FC = () => {
@@ -8,6 +8,7 @@ const MediaProcessor: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [history, setHistory] = useState<string[]>([]);
+  const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,25 +18,40 @@ const MediaProcessor: React.FC = () => {
       reader.onloadend = () => {
         setImage(reader.result as string);
         setHistory([reader.result as string]);
+        setStatus({ type: 'success', message: 'Image loaded successfully!' });
+        setTimeout(() => setStatus({ type: null, message: '' }), 3000);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleEdit = async () => {
-    if (!image || !prompt) return;
+    if (!image || !prompt) {
+      setStatus({ type: 'error', message: 'Please upload an image and enter a prompt' });
+      return;
+    }
+    
     setProcessing(true);
+    setStatus({ type: null, message: '' });
+    
     try {
       const base64Data = image.split(',')[1];
-      const mimeType = image.split(';')[0].split(':')[1];
+      const mimeType = image.split(';')[0].split(':')[1] || 'image/png';
+      
       const result = await editImage(base64Data, prompt, mimeType);
+      
       if (result) {
         setImage(result);
         setHistory(prev => [...prev, result]);
         setPrompt("");
+        setStatus({ type: 'success', message: 'Enhancement applied successfully!' });
+        setTimeout(() => setStatus({ type: null, message: '' }), 3000);
+      } else {
+        setStatus({ type: 'error', message: 'Failed to process image' });
       }
     } catch (error) {
       console.error("Editing failed", error);
+      setStatus({ type: 'error', message: 'Error processing image: ' + (error instanceof Error ? error.message : 'Unknown error') });
     } finally {
       setProcessing(false);
     }
@@ -47,6 +63,8 @@ const MediaProcessor: React.FC = () => {
       newHistory.pop();
       setHistory(newHistory);
       setImage(newHistory[newHistory.length - 1]);
+      setStatus({ type: 'success', message: 'Undo successful' });
+      setTimeout(() => setStatus({ type: null, message: '' }), 2000);
     }
   };
 
@@ -59,7 +77,7 @@ const MediaProcessor: React.FC = () => {
         </div>
         <div className="flex gap-2">
            {history.length > 1 && (
-             <button onClick={undo} className="px-4 py-2 glass rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2">
+             <button onClick={undo} className="px-4 py-2 glass rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-2 text-sm font-semibold">
                <RefreshCcw size={16} /> Undo
              </button>
            )}
@@ -72,6 +90,22 @@ const MediaProcessor: React.FC = () => {
            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
         </div>
       </header>
+
+      {/* Status Alerts */}
+      {status.type && (
+        <div className={`p-4 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top duration-300 ${
+          status.type === 'success' 
+            ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-100' 
+            : 'bg-rose-500/20 border border-rose-500/40 text-rose-100'
+        }`}>
+          {status.type === 'success' ? (
+            <CheckCircle size={20} className="flex-shrink-0" />
+          ) : (
+            <AlertCircle size={20} className="flex-shrink-0" />
+          )}
+          <p className="text-sm font-medium">{status.message}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
         {/* Workspace */}
@@ -115,7 +149,7 @@ const MediaProcessor: React.FC = () => {
               Neural Processor
             </h3>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Describe modifications or analysis tasks to be performed on the tactical imagery using Gemini 2.5 Flash Image.
+              Describe modifications or analysis tasks to be performed on the tactical imagery.
             </p>
           </div>
 
@@ -125,7 +159,7 @@ const MediaProcessor: React.FC = () => {
               <textarea 
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., 'Apply night vision filter and highlight thermal signatures' or 'Clear background haze'..."
+                placeholder="e.g., 'Apply night vision filter', 'Remove atmospheric fog', 'Boost saturation'..."
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500 h-32 resize-none transition-all placeholder:text-slate-600"
               />
             </div>
@@ -133,10 +167,28 @@ const MediaProcessor: React.FC = () => {
             <button 
               onClick={handleEdit}
               disabled={!image || !prompt || processing}
-              className="w-full py-4 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+              className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg ${
+                !image || !prompt || processing
+                  ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                  : 'bg-sky-600 hover:bg-sky-500 text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] active:scale-95'
+              }`}
             >
-              <Send size={18} /> Apply Enhancements
+              {processing ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" /> Processing...
+                </>
+              ) : (
+                <>
+                  <Send size={18} /> Apply Enhancements
+                </>
+              )}
             </button>
+
+            {(!image || !prompt) && (
+              <p className="text-xs text-slate-500 text-center">
+                {!image ? 'Upload an image first' : 'Enter a prompt to apply enhancements'}
+              </p>
+            )}
           </div>
 
           <div className="mt-auto space-y-3">
@@ -150,8 +202,11 @@ const MediaProcessor: React.FC = () => {
               ].map((preset) => (
                 <button 
                   key={preset}
-                  onClick={() => setPrompt(preset)}
-                  className="px-3 py-2 text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors text-left"
+                  onClick={() => {
+                    setPrompt(preset);
+                    setStatus({ type: null, message: '' });
+                  }}
+                  className="px-3 py-2 text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors text-left hover:text-sky-400 active:scale-95"
                 >
                   {preset}
                 </button>

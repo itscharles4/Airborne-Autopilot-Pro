@@ -12,6 +12,8 @@ import TSPOptimizer from './components/TSPOptimizer';
 import FlightReplay from './components/FlightReplay';
 import RevenueDashboard from './components/RevenueDashboard';
 import PredictiveMaintenance from './components/PredictiveMaintenance';
+import MissionLaunchPlanner from './components/MissionLaunchPlanner';
+import SettingsModal from './components/SettingsModal';
 import { LayoutGrid, Navigation, Settings, LayoutDashboard, Bell, Search, Activity, Cpu, Sparkles, Route, Clock, BarChart2, Bot, Wrench } from 'lucide-react';
 
 const INITIAL_DRONES: Drone[] = [
@@ -19,6 +21,12 @@ const INITIAL_DRONES: Drone[] = [
   { id: 'beta-2', name: 'Beta-2', model: 'CZ4-Light', status: DroneStatus.FLYING, battery: 91.1, speed: 60, maxAltitude: 300, position: { x: 200, y: 120, z: 150 }, lastUpdated: new Date().toISOString() },
   { id: 'gamma-3', name: 'Gamma-3', model: 'CZ4-Heavy', status: DroneStatus.IDLE, battery: 100, speed: 0, maxAltitude: 500, position: { x: 0, y: 0, z: 0 }, lastUpdated: new Date().toISOString() },
   { id: 'delta-4', name: 'Delta-4', model: 'CZ5-Nano', status: DroneStatus.FLYING, battery: 12.5, speed: 30, maxAltitude: 150, position: { x: -50, y: 200, z: 80 }, lastUpdated: new Date().toISOString() },
+  { id: 'echo-5', name: 'Echo-5', model: 'CZ4-Heavy', status: DroneStatus.FLYING, battery: 75.3, speed: 55, maxAltitude: 500, position: { x: 300, y: -150, z: 120 }, lastUpdated: new Date().toISOString() },
+  { id: 'foxtrot-6', name: 'Foxtrot-6', model: 'CZ4-Light', status: DroneStatus.FLYING, battery: 68.9, speed: 48, maxAltitude: 400, position: { x: -250, y: -100, z: 95 }, lastUpdated: new Date().toISOString() },
+  { id: 'golf-7', name: 'Golf-7', model: 'CZ5-Nano', status: DroneStatus.IDLE, battery: 100, speed: 0, maxAltitude: 200, position: { x: 150, y: -200, z: 0 }, lastUpdated: new Date().toISOString() },
+  { id: 'hotel-8', name: 'Hotel-8', model: 'CZ4-Heavy', status: DroneStatus.FLYING, battery: 55.7, speed: 42, maxAltitude: 500, position: { x: -180, y: 250, z: 110 }, lastUpdated: new Date().toISOString() },
+  { id: 'india-9', name: 'India-9', model: 'CZ4-Light', status: DroneStatus.FLYING, battery: 82.4, speed: 58, maxAltitude: 350, position: { x: 220, y: 180, z: 85 }, lastUpdated: new Date().toISOString() },
+  { id: 'juliet-10', name: 'Juliet-10', model: 'CZ5-Nano', status: DroneStatus.FLYING, battery: 43.2, speed: 35, maxAltitude: 250, position: { x: -320, y: -180, z: 60 }, lastUpdated: new Date().toISOString() },
 ];
 
 const App: React.FC = () => {
@@ -26,6 +34,8 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('3D');
   const [drones, setDrones] = useState<Drone[]>(INITIAL_DRONES);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentIST, setCurrentIST] = useState('00:00:00');
 
   // Telemetry update simulation
   useEffect(() => {
@@ -44,12 +54,44 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isLoggedIn]);
 
+  // System uptime timer - IST time
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    
+    const updateIST = () => {
+      const now = new Date();
+      // Use intl to get proper IST time
+      const istFormatter = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      
+      const parts = istFormatter.formatToParts(now);
+      const hour = parts.find(p => p.type === 'hour')?.value || '00';
+      const minute = parts.find(p => p.type === 'minute')?.value || '00';
+      const second = parts.find(p => p.type === 'second')?.value || '00';
+      
+      setCurrentIST(`${hour}:${minute}:${second}`);
+    };
+    
+    updateIST();
+    const interval = setInterval(updateIST, 1000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
   const handleAddDrone = (newDrone: Drone) => {
     setDrones(prev => [...prev, newDrone]);
   };
 
   if (!isLoggedIn) {
-    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+    return <LoginPage onLogin={() => {
+      setIsLoggedIn(true);
+      // Store a mock JWT token for API calls
+      localStorage.setItem('token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjEyMzQ1Njc4OTB1c2VyIiwiZW1haWwiOiJkZW1vQGFpcmJvcm5lLmNvbSIsImlhdCI6MTcwMDU4NzQ4OH0.nH5xQkHK_qCdE7vqJvAjF8LrMj8UXfA7t3J4K8LdP1w');
+    }} />;
   }
 
   const NavItem = ({ icon: Icon, label, type }: { icon: any, label: string, type: ViewType }) => (
@@ -77,7 +119,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2">
+        <nav className="flex-1 space-y-2 overflow-y-auto pr-2">
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 px-4">Operational</div>
           <NavItem icon={LayoutGrid} label="Airspace Visualizer" type="3D" />
           <NavItem icon={Navigation} label="Fleet Manager" type="FLEET" />
@@ -95,16 +137,19 @@ const App: React.FC = () => {
         </nav>
 
         <div className="mt-auto space-y-4">
-          <button className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-white transition-colors">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200 cursor-pointer"
+          >
             <Settings size={20} />
             <span className="text-sm font-semibold">Settings</span>
           </button>
           <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-bold text-slate-400">System Uptime</span>
+              <span className="text-xs font-bold text-slate-400">System Time (IST)</span>
               <span className="text-[10px] text-emerald-400 font-bold px-1.5 py-0.5 bg-emerald-500/10 rounded">Live</span>
             </div>
-            <div className="text-lg font-mono font-bold">12:42:08</div>
+            <div className="text-lg font-mono font-bold">{currentIST}</div>
           </div>
         </div>
       </aside>
@@ -153,15 +198,18 @@ const App: React.FC = () => {
           {activeView === 'REVENUE' && <RevenueDashboard drones={drones} />}
           {activeView === 'MAINTENANCE' && <PredictiveMaintenance drones={drones} />}
           {activeView === 'FLIGHTS' && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <Navigation size={64} className="text-slate-800 mb-6" />
-              <h2 className="text-2xl font-bold mb-2">Flight Control Console</h2>
-              <p className="text-slate-500 max-w-md">Initialize automated missions, calculate optimal trajectories using A*, and coordinate multi-drone logistics.</p>
-              <button className="mt-8 px-8 py-3 bg-sky-600 rounded-xl font-bold hover:bg-sky-500 transition-all">Launch Mission Planner</button>
-            </div>
+            <MissionLaunchPlanner 
+              drones={drones} 
+              onLaunch={(mission) => {
+                console.log('Mission launched:', mission);
+                // Add your mission launch logic here
+              }}
+            />
           )}
         </div>
       </main>
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 };
